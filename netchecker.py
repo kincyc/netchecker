@@ -1,3 +1,5 @@
+#!/opt/homebrew/bin/python3
+
 import speedtest
 import time
 import os
@@ -119,5 +121,5 @@ if __name__ == "__main__":
 	parser.add_argument("--interval", "-i", type=int, default=5, help="Interval in minutes between each test (default is 5 minutes).")
 	parser.add_argument("--silent", "-s", action="store_true", help="Run in silent mode without printing results to the screen.")
 	args = parser.parse_args()
-
+	print(f"Interval: {args.interval}\tSilent Mode: {args.silent}")
 	main(args.interval, args.silent)
