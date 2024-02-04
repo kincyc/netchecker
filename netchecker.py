@@ -11,10 +11,26 @@ from datetime import datetime, timedelta
 last_test_time = None
 last_ssid = None
 
-def setup_logging(silent_mode):
-	logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-	if silent_mode:
-		logging.getLogger().setLevel(logging.WARNING)
+
+def init_log_file(ssid):
+	file_name = f"{ssid}.log"
+	if not os.path.exists(file_name):
+		with open(file_name, 'w') as file:
+			header = "Date        Time      Network            Delay     D/L     U/L    Ping  ISP               Test Server\n"
+			file.write(header)
+	return file_name
+
+def setup_logging(silent_mode, ssid):
+	file_name = init_log_file(ssid)	 # Ensure the log file exists and has a header
+	# removing the logging timestamp
+	# log_format = "%(asctime)-20s %(message)s"
+	log_format = "%(message)s"
+	logging.basicConfig(level=logging.INFO if not silent_mode else logging.WARNING,
+						format=log_format,
+						handlers=[
+							logging.FileHandler(file_name, mode='a'),  # Append mode
+							logging.StreamHandler()
+						])
 
 def sanitize_ssid(ssid):
 	ssid = re.sub(r'[^\w\s]', '', ssid)	 # Remove punctuation
@@ -41,81 +57,61 @@ def calculate_delay(current_time):
 	return delay
 
 def test_speed(ssid):
-	global last_test_time
-	try:
-		st = speedtest.Speedtest()
-		st.download()
-		st.upload()
-		st.get_servers([])
-		st.get_best_server()
-		results_dict = st.results.dict()
+    global last_test_time
+    try:
+        st = speedtest.Speedtest()
+        st.download()
+        st.upload()
+        st.get_servers([])
+        st.get_best_server()
+        results_dict = st.results.dict()
 
-		utc_timestamp = datetime.strptime(results_dict["timestamp"], "%Y-%m-%dT%H:%M:%S.%fZ")
-		local_timestamp = utc_timestamp - timedelta(hours=8)
-		delay = calculate_delay(local_timestamp)
-		date = local_timestamp.strftime("%Y-%m-%d")
-		time_str = local_timestamp.strftime("%H:%M:%S")
+        utc_timestamp = datetime.strptime(results_dict["timestamp"], "%Y-%m-%dT%H:%M:%S.%fZ")
+        local_timestamp = utc_timestamp - timedelta(hours=8)
+        delay = calculate_delay(local_timestamp)
+        return {
+            "date": local_timestamp.strftime("%Y-%m-%d"),
+            "time": local_timestamp.strftime("%H:%M:%S"),
+            "network": ssid[:16].ljust(16),
+            "delay": delay,
+            "download_speed": results_dict["download"] / 1024 / 1024,
+            "upload_speed": results_dict["upload"] / 1024 / 1024,
+            "ping": results_dict["ping"],
+            "isp": results_dict["client"]["isp"][:16].ljust(16),
+            "server": results_dict["server"]["name"]
+        }
+    except Exception as e:
+        now = datetime.now()
+        delay = calculate_delay(now)
+        # Directly incorporate the error message into the ISP column
+        error_message = "Error: " + str(e).split(":")[-1]  # Simplify the error message if needed
+        return {
+            "date": now.strftime("%Y-%m-%d"),
+            "time": now.strftime("%H:%M:%S"),
+            "network": ssid[:16].ljust(16),
+            "delay": delay,
+            "download_speed": 0,
+            "upload_speed": 0,
+            "ping": 0,
+            "isp": error_message[:16].ljust(16),  # Ensure the error fits into the ISP column
+            "server": ""
+        }
 
-		return {
-			"date": date,
-			"time": time_str,
-			"network": ssid[:16].ljust(16),
-			"delay": "{:6.2f}".format(delay),
-			"download_speed": "{:6.2f}".format(results_dict["download"] / 1024 / 1024),
-			"upload_speed": "{:6.2f}".format(results_dict["upload"] / 1024 / 1024),
-			"ping": "{:6.2f}".format(results_dict["ping"]),
-			"isp": results_dict["client"]["isp"][:16].ljust(16),
-			"server": results_dict["server"]["name"]
-		}
-	except Exception as e:
-		logging.error(f"Error occurred: {e}")
-		now = datetime.now()
-		delay = calculate_delay(now)
-		error_message = str(e)[:16].ljust(16)  # Truncate and pad the error message
-		return {
-			"date": now.strftime("%Y-%m-%d"),
-			"time": now.strftime("%H:%M:%S"),
-			"network": ssid[:16].ljust(16),
-			"delay": "{:6.2f}".format(delay),
-			"download_speed": "{:6.2f}".format(0),
-			"upload_speed": "{:6.2f}".format(0),
-			"ping": "{:6.2f}".format(0),
-			"isp": error_message,
-			"server": ""
-		}
-
-def init_log_file(ssid):
-	file_name = f"{ssid}.log"
-	if not os.path.exists(file_name):
-		logging.warning(f"creating : {file_name}")
-		with open(file_name, 'w') as file:
-			file.write("Date		Time	  Network			delay	D/L		U/L		Ping	ISP				  Test Server\n")			 
-
-	return file_name																						
-
-def get_log_file():
-	global last_ssid
-	ssid = get_wifi_network_name()
-	ssid = sanitize_ssid(ssid)
-	if ssid != last_ssid:
-		last_ssid = ssid
-		return init_log_file(ssid)
-	else:
-		return f"{ssid}.log"
-
-def write_results_to_file(results):
-	file_name = get_log_file()
-	with open(file_name, 'a') as file:
-		file.write(f"{results['date']}	{results['time']}  {results['network']}	 {results['delay']}	 {results['download_speed']}  {results['upload_speed']}	 {results['ping']}	{results['isp']}  {results['server']}\n")
+def format_results(results):
+	formatted_result = f"{results['date']:10}  {results['time']:8}  {results['network']}  " \
+					   f"{results['delay']:6.2f}  {results['download_speed']:6.2f}  " \
+					   f"{results['upload_speed']:6.2f}  {results['ping']:6.2f}  " \
+					   f"{results['isp']}  {results['server']}"
+	return formatted_result
 
 def main(interval_minutes, silent_mode):
-	setup_logging(silent_mode)
+	ssid = get_wifi_network_name()
+	ssid = sanitize_ssid(ssid)
+	setup_logging(silent_mode, ssid)
 	while True:
-		ssid = get_wifi_network_name()
-		ssid = sanitize_ssid(ssid)
 		results = test_speed(ssid)
-		logging.info(f"Speed Test Results: {results}")
-		write_results_to_file(results)
+		formatted_results = format_results(results)
+		logging.info(formatted_results)
 		time.sleep(interval_minutes * 60)
 
 if __name__ == "__main__":
