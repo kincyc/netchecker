@@ -117,7 +117,7 @@ def format_results(results):
 
 def start_message(now, ssid):
 	# this message is printed at script start to indicate a restart of the monitor
-	formatted_result = f"{now.strftime("%Y-%m-%d")}  {now.strftime("%H:%M:%S")}  {ssid}          RESTART"
+	formatted_result = f"{now.strftime('%Y-%m-%d')}  {now.strftime('%H:%M:%S')}  {ssid}          RESTART"
 	return formatted_result
 
 def main(interval_minutes, silent_mode):
