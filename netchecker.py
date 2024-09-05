@@ -41,11 +41,13 @@ def sanitize_ssid(ssid):
 
 def get_wifi_network_name():
 	try:
-		result = subprocess.check_output("/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I", shell=True).decode('utf-8')
-		for line in result.split('\n'):
-			if ' SSID:' in line:
-				return line.split(': ')[1]
-		return "Not_Connected_or_Unknown"
+		# Get the Wi-Fi device (usually 'Wi-Fi' or 'en0' on Macs)
+		result = subprocess.check_output(["networksetup", "-getairportnetwork", "en0"]).decode('utf-8')
+		# Parse the result for the SSID
+		if "You are not associated with an AirPort network" in result:
+			return "Not_Connected_or_Unknown"
+		else:
+			return result.split(": ")[1].strip()
 	except subprocess.CalledProcessError:
 		return "Error_Retrieving_SSID"
 
@@ -58,46 +60,53 @@ def calculate_delay(current_time):
 	last_test_time = current_time
 	return delay
 
-def test_speed(ssid):
-    global last_test_time
-    try:
-        st = speedtest.Speedtest()
-        st.download()
-        st.upload()
-        st.get_servers([])
-        st.get_best_server()
-        results_dict = st.results.dict()
+def update_delay():
+	global last_test_time
+	now = datetime.now()
+	delay = calculate_delay(now)
+	return [now, delay]
 
-        utc_timestamp = datetime.strptime(results_dict["timestamp"], "%Y-%m-%dT%H:%M:%S.%fZ")
-        local_timestamp = utc_timestamp - timedelta(hours=8)
-        delay = calculate_delay(local_timestamp)
-        return {
-            "date": local_timestamp.strftime("%Y-%m-%d"),
-            "time": local_timestamp.strftime("%H:%M:%S"),
-            "network": ssid[:16].ljust(16),
-            "delay": delay,
-            "download_speed": results_dict["download"] / 1024 / 1024,
-            "upload_speed": results_dict["upload"] / 1024 / 1024,
-            "ping": results_dict["ping"],
-            "isp": results_dict["client"]["isp"][:16].ljust(16),
-            "server": results_dict["server"]["name"]
-        }
-    except Exception as e:
-        now = datetime.now()
-        delay = calculate_delay(now)
-        # Directly incorporate the error message into the ISP column
-        error_message = "Error: " + str(e).split(":")[-1]  # Simplify the error message if needed
-        return {
-            "date": now.strftime("%Y-%m-%d"),
-            "time": now.strftime("%H:%M:%S"),
-            "network": ssid[:16].ljust(16),
-            "delay": delay,
-            "download_speed": 0,
-            "upload_speed": 0,
-            "ping": 0,
-            "isp": error_message[:16].ljust(16),  # Ensure the error fits into the ISP column
-            "server": ""
-        }
+def test_speed(ssid):
+	now, delay = update_delay()
+	try:
+		st = speedtest.Speedtest()
+		st.download()
+		st.upload()
+		st.get_servers([])
+		st.get_best_server()
+		results_dict = st.results.dict()
+
+		# we used to get the time from the speedtest object but then we had to switch to system time
+		# if speedtest was down. This is no longer necessary.
+		# utc_timestamp = datetime.strptime(results_dict["timestamp"], "%Y-%m-%dT%H:%M:%S.%fZ")
+		# local_timestamp = utc_timestamp - timedelta(hours=8)
+		# delay = calculate_delay(local_timestamp)
+		return {
+			"date": now.strftime("%Y-%m-%d"),
+			"time": now.strftime("%H:%M:%S"),
+			"network": ssid[:16].ljust(16),
+			"delay": delay,
+			"download_speed": results_dict["download"] / 1024 / 1024,
+			"upload_speed": results_dict["upload"] / 1024 / 1024,
+			"ping": results_dict["ping"],
+			"isp": results_dict["client"]["isp"][:16].ljust(16),
+			"server": results_dict["server"]["name"]
+		}
+	except Exception as e:
+
+		# Directly incorporate the error message into the ISP column
+		error_message = "Error: " + str(e).split(":")[-1]  # Simplify the error message if needed
+		return {
+			"date": now.strftime("%Y-%m-%d"),
+			"time": now.strftime("%H:%M:%S"),
+			"network": ssid[:16].ljust(16),
+			"delay": delay,
+			"download_speed": 0,
+			"upload_speed": 0,
+			"ping": 0,
+			"isp": error_message[:16].ljust(16),  # Ensure the error fits into the ISP column
+			"server": ""
+		}
 
 def format_results(results):
 	formatted_result = f"{results['date']:10}  {results['time']:8}  {results['network']}  " \
@@ -106,10 +115,16 @@ def format_results(results):
 					   f"{results['isp']}  {results['server']}"
 	return formatted_result
 
+def start_message(now, ssid):
+	# this message is printed at script start to indicate a restart of the monitor
+	formatted_result = f"{now.strftime("%Y-%m-%d")}  {now.strftime("%H:%M:%S")}  {ssid}          RESTART"
+	return formatted_result
+
 def main(interval_minutes, silent_mode):
 	ssid = get_wifi_network_name()
 	ssid = sanitize_ssid(ssid)
 	setup_logging(silent_mode, ssid)
+	logging.info(start_message(datetime.now(), ssid))
 	while True:
 		results = test_speed(ssid)
 		formatted_results = format_results(results)
