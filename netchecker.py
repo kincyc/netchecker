@@ -95,7 +95,7 @@ def test_speed(ssid):
 	except Exception as e:
 
 		# Directly incorporate the error message into the ISP column
-		error_message = "Error: " + str(e).split(":")[-1]  # Simplify the error message if needed
+		error_message = "Error:" + str(e).split(":")[-1]  # Simplify the error message if needed
 		return {
 			"date": now.strftime("%Y-%m-%d"),
 			"time": now.strftime("%H:%M:%S"),
@@ -104,7 +104,7 @@ def test_speed(ssid):
 			"download_speed": 0,
 			"upload_speed": 0,
 			"ping": 0,
-			"isp": error_message[:16].ljust(16),  # Ensure the error fits into the ISP column
+			"isp": error_message,
 			"server": ""
 		}
 
