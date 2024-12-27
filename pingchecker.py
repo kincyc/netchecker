@@ -68,7 +68,7 @@ def ping_address(address, threshold):
     try:
         # Ping the given address with a single request (-c 1 for one ping)
         result = subprocess.run(
-            ["ping", "-c", "1", address],
+            ["ping", "-c", "1", "-t", "1", address],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
