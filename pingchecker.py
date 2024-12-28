@@ -35,17 +35,18 @@ def get_wifi_network_name():
 # Function to initialize the log file
 def init_log_file(ssid):
     file_name = f"{ssid}-ping.log"
+    header = "Network\tDate\t    Time\tDelta\t\tPing Result"
     if not os.path.exists(file_name):
         with open(file_name, "w") as file:
-            header = "Date        Time      Network            Ping Result\n"
-            file.write(header)
+            file.write(f"{header}\n")
+    print(header)
     return file_name
 
 
 # Function to set up logging
 def setup_logging(ssid, silent_mode=False):
     file_name = init_log_file(ssid)
-    log_format = "%(message)s"  # Log format without timestamps (timestamps are included in the message)
+    log_format = "%(message)s"  # Log format without timestamps
     logging.basicConfig(
         level=logging.INFO if not silent_mode else logging.WARNING,
         format=log_format,
@@ -56,15 +57,7 @@ def setup_logging(ssid, silent_mode=False):
     )
 
 
-# Function to log a start or restart message
-def start_message(now, ssid):
-    # This message is printed/logged at the script start to indicate a restart of the monitor
-    formatted_result = f"{now.strftime('%Y-%m-%d')}  {now.strftime('%H:%M:%S')}  {ssid}          RESTART"
-    return formatted_result
-
-
-# Function to ping a given address and log the result
-def ping_address(address, threshold):
+def ping_address(address, threshold, interval, last_ping_time):
     try:
         # Ping the given address with a single request (-c 1 for one ping)
         result = subprocess.run(
@@ -77,45 +70,51 @@ def ping_address(address, threshold):
         error = result.stderr
 
         # Get the current timestamp and network name (SSID)
-        timestamp = datetime.now().strftime("%Y-%m-%d  %H:%M:%S")
+        now = datetime.now()
+        timestamp = now.strftime("%Y-%m-%d  %H:%M:%S")
         ssid = sanitize_ssid(get_wifi_network_name())
 
         # Check for error in the ping response
         if error:
-            # If there is an error (e.g., no route to host), log the error message with timestamp
-            message = f"{timestamp}\t{ssid}\tPing to {address} failed: {error.strip()}"
+            message = f"{ssid}\t{timestamp}\tPing to {address} failed: {error.strip()}"
             logging.error(message)
         else:
-            # Extract relevant ping info using regex for a successful ping
+            # Extract relevant ping info using regex
             match = re.search(
                 r"(\d+) bytes from [^\s]+: icmp_seq=(\d+) ttl=(\d+) time=([\d.]+) ms",
                 output,
             )
             if match:
-                bytes_received = match.group(1)
-                icmp_seq = match.group(2)
                 ttl = match.group(3)
-                time_ms = float(match.group(4))  # Convert time to float for comparison
+                time_ms = float(match.group(4))
 
-                # Prepare the ping message
-                message = f"{timestamp}\t{ssid}\t{bytes_received} bytes from {address}\ticmp_seq={icmp_seq}\tttl={ttl}\ttime={time_ms} ms"
-
-                # Check if the ping time exceeds the threshold
-                if time_ms > threshold:
-                    # Log in red if the time exceeds the threshold (in console)
-                    logging.info(colored(message, "red"))
-                else:
-                    # Log normally if the time is within the threshold
+                # Prepare the restart message with ttl
+                if last_ping_time is None:
+                    message = (
+                        f"{ssid}\t{timestamp}\tRESTART\t\tttl={ttl}\ttime={time_ms} ms"
+                    )
                     logging.info(message)
+                else:
+                    # Prepare the ping message for subsequent pings
+                    time_delta = (now - last_ping_time).total_seconds()
+                    time_delta_str = f"{time_delta:.2f} sec"
+                    message = f"{ssid}\t{timestamp}\t{time_delta_str}\tttl={ttl}\ttime={time_ms} ms"
+
+                    # Check if the ping time exceeds the threshold
+                    if time_ms > threshold or time_delta > (2 * interval):
+                        logging.info(colored(message, "red"))
+                    else:
+                        logging.info(message)
             else:
-                logging.error(
-                    f"{timestamp}\t{ssid}\tPing to {address} failed or no match found in output."
-                )
+                logging.error(f"{timestamp}\t{ssid}\tPing failed or no match found.")
+
+        return now  # Update the last ping time
     except Exception as e:
         logging.error(f"An error occurred: {e}")
+        return last_ping_time
 
 
-# Main function to parse command-line arguments and call the ping function
+# Main function
 if __name__ == "__main__":
     # Set up argparse to handle command-line input
     parser = argparse.ArgumentParser(
@@ -129,20 +128,16 @@ if __name__ == "__main__":
         "-i",
         type=int,
         default=1,
-        help="Interval between pings in seconds (default is 1 second)",
+        help="Interval between pings in seconds",
     )
     parser.add_argument(
-        "--threshold",
-        "-t",
-        type=float,
-        default=100.0,
-        help="Time threshold in milliseconds to trigger red warning (default is 100 ms)",
+        "--threshold", "-t", type=float, default=100.0, help="Threshold in milliseconds"
     )
     parser.add_argument(
         "--silent",
         "-s",
         action="store_true",
-        help="Run in silent mode (log to file only, no console output)",
+        help="Run in silent mode (log to file only)",
     )
 
     # Parse the arguments
@@ -154,12 +149,12 @@ if __name__ == "__main__":
     # Set up logging
     setup_logging(ssid, args.silent)
 
-    # Log the start message
-    logging.info(start_message(datetime.now(), ssid))
+    # Initialize the last ping time
+    last_ping_time = None
 
-    # Continuously ping the provided address with the specified interval and threshold
+    # Continuously ping the provided address
     while True:
-        ping_address(args.address, args.threshold)
-        time.sleep(
-            args.interval
-        )  # Use the interval provided by the user (default 1 second)
+        last_ping_time = ping_address(
+            args.address, args.threshold, args.interval, last_ping_time
+        )
+        time.sleep(args.interval)
