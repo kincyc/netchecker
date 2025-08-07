@@ -57,6 +57,22 @@ def setup_logging(ssid, silent_mode=False):
     )
 
 
+# Function to get the boot mode (Safe Mode or Normal)
+def get_boot_mode():
+    try:
+        result = subprocess.check_output(
+            ["system_profiler", "SPSoftwareDataType"], text=True
+        )
+        # Extract the "Boot Mode" from the result
+        match = re.search(r"Boot Mode: (\w+)", result)
+        if match:
+            return match.group(1)  # Return the boot mode (Safe or Normal)
+        else:
+            return "Unknown"
+    except subprocess.CalledProcessError:
+        return "Error_Retrieving_Boot_Mode"
+
+
 def ping_address(address, threshold, interval, last_ping_time):
     try:
         # Ping the given address with a single request (-c 1 for one ping)
@@ -139,6 +155,10 @@ if __name__ == "__main__":
         action="store_true",
         help="Run in silent mode (log to file only)",
     )
+
+    # Get the boot mode (Safe or Normal)
+    boot_mode = get_boot_mode()
+    print(f"\nBoot Mode: {boot_mode.upper()}\n")
 
     # Parse the arguments
     args = parser.parse_args()
