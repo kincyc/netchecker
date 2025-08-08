@@ -8,6 +8,8 @@ import argparse
 import logging
 import re
 from datetime import datetime, timedelta
+import json
+from wifi_utils.network import get_wifi_network_name, sanitize_ssid
 
 # Global variable to store the time of the last test and last SSID
 last_test_time = None
@@ -16,9 +18,10 @@ last_ssid = None
 
 def init_log_file(ssid):
     file_name = f"{ssid}.log"
+    header = "Date        Time      Network            Delay     D/L     U/L    Ping  ISP               Test Server\n"
+    print(header)
     if not os.path.exists(file_name):
         with open(file_name, "w") as file:
-            header = "Date        Time      Network            Delay     D/L     U/L    Ping  ISP               Test Server\n"
             file.write(header)
     return file_name
 
@@ -36,28 +39,6 @@ def setup_logging(silent_mode, ssid):
             logging.StreamHandler(),
         ],
     )
-
-
-def sanitize_ssid(ssid):
-    ssid = re.sub(r"[^\w\s]", "", ssid)  # Remove punctuation
-    ssid = ssid.replace(" ", "_")  # Replace spaces with underscores
-    return ssid
-
-
-def get_wifi_network_name():
-    try:
-        # Get the Wi-Fi device (usually 'Wi-Fi' or 'en0' on Macs)
-        result = subprocess.check_output(
-            ["ipconfig", "getsummary", "en0"],
-            text=True,  # Ensures the output is returned as a string
-        )
-        # Use awk to parse the SSID from the result
-        ssid = subprocess.check_output(
-            ["awk", "-F", " SSID : ", "/ SSID : / {print $2}"], input=result, text=True
-        ).strip()
-        return ssid if ssid else "Not_Connected_or_Unknown"
-    except subprocess.CalledProcessError:
-        return "Error_Retrieving_SSID"
 
 
 def calculate_delay(current_time):
@@ -134,7 +115,7 @@ def format_results(results):
 
 def start_message(now, ssid):
     # this message is printed at script start to indicate a restart of the monitor
-    formatted_result = f"{now.strftime('%Y-%m-%d')}  {now.strftime('%H:%M:%S')}  {ssid}          RESTART"
+    formatted_result = f"{now.strftime('%Y-%m-%d')}  {now.strftime('%H:%M:%S')}  {ssid}            RESTARTING NETCHECKER"
     return formatted_result
 
 

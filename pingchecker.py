@@ -5,31 +5,9 @@ import argparse
 import time
 import logging
 import os
+import json
+from wifi_utils.network import get_wifi_network_name, sanitize_ssid
 from termcolor import colored  # For colored output
-
-
-# Function to sanitize the SSID name
-def sanitize_ssid(ssid):
-    ssid = re.sub(r"[^\w\s]", "", ssid)  # Remove punctuation
-    ssid = ssid.replace(" ", "_")  # Replace spaces with underscores
-    return ssid
-
-
-# Function to get the current Wi-Fi network name (SSID)
-def get_wifi_network_name():
-    try:
-        # Get the Wi-Fi device (usually 'Wi-Fi' or 'en0' on Macs)
-        result = subprocess.check_output(
-            ["ipconfig", "getsummary", "en0"],
-            text=True,  # Ensures the output is returned as a string
-        )
-        # Use awk to parse the SSID from the result
-        ssid = subprocess.check_output(
-            ["awk", "-F", " SSID : ", "/ SSID : / {print $2}"], input=result, text=True
-        ).strip()
-        return ssid if ssid else "Not_Connected_or_Unknown"
-    except subprocess.CalledProcessError:
-        return "Error_Retrieving_SSID"
 
 
 # Function to initialize the log file
@@ -137,7 +115,11 @@ if __name__ == "__main__":
         description="Ping a given address and display results with a timestamp and network information."
     )
     parser.add_argument(
-        "--address", "-a", type=str, help="The address to ping (e.g., 8.8.8.8)"
+        "--address",
+        "-a",
+        type=str,
+        help="The address to ping (e.g., 8.8.8.8)",
+        default="8.8.8.8",
     )
     parser.add_argument(
         "--interval",
