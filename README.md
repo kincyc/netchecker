@@ -29,11 +29,9 @@ _Column meanings_
 
 because of security settings in MacOS with regards to location services, you'll need to install the following:
 
-git https://github.com/noperator/wifi-unredactor.git
-git --help
 git clone https://github.com/noperator/wifi-unredactor.git
 cd wifi-unredactor
-ls -lsa
-more README.md
 ./build-and-install.sh
 ~/Applications/wifi-unredactor.app/Contents/MacOS/wifi-unredactor
+
+goto Settings / Privacy / Locations and turn on for wifi-unredactor
